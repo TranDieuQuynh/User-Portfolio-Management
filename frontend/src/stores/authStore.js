@@ -6,55 +6,69 @@ const useAuthStore = create((set) => ({
   isAuthenticated: false,
   isLoading: false,
   error: null,
+  isAuthChecked: false,
 
   checkAuth: async () => {
+    console.log('Starting auth check...');
+    set({ isAuthChecked: false });
     try {
       const token = localStorage.getItem('token');
+      console.log('Token found in localStorage for checkAuth:', token ? 'Yes' : 'No');
       if (!token) {
-        set({ isAuthenticated: false, user: null });
+        set({ isAuthenticated: false, user: null, isAuthChecked: true });
+        console.log('No token, setting isAuthenticated to false.');
         return;
       }
 
       const response = await authService.getProfile();
+      console.log('getProfile response:', response);
       if (response.success) {
-        set({ isAuthenticated: true, user: response.data });
+        set({ isAuthenticated: true, user: response.user, isAuthChecked: true });
+        console.log('Auth successful, user set.');
       } else {
-        set({ isAuthenticated: false, user: null });
+        set({ isAuthenticated: false, user: null, isAuthChecked: true });
         localStorage.removeItem('token');
+        console.log('getProfile unsuccessful, setting isAuthenticated to false and removing token.');
       }
     } catch (error) {
       console.error('Auth check error:', error);
-      set({ isAuthenticated: false, user: null });
+      set({ isAuthenticated: false, user: null, isAuthChecked: true });
       localStorage.removeItem('token');
+      console.log('Auth check failed, setting isAuthenticated to false and removing token.');
     }
   },
 
-  signin: async (credentials) => {
+  signin: async (email, password) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await authService.signin(credentials);
+      const response = await authService.signin(email, password);
+      console.log('Signin response:', response);
+      
       if (response.success && response.token) {
+        console.log('Token received from server:', response.token.substring(0, 10) + '...');
         localStorage.setItem('token', response.token);
-        set({ 
-          isAuthenticated: true, 
-          user: response.user,
-          isLoading: false 
-        });
-        return { success: true };
+        console.log('Token stored in localStorage:', response.token.substring(0, 10) + '...');
+        
+        const storedToken = localStorage.getItem('token');
+        console.log('Verified stored token:', storedToken ? storedToken.substring(0, 10) + '...' : 'No token found');
+        
+        if (storedToken) {
+          set({ isAuthenticated: true, user: response.user });
+          return { success: true };
+        } else {
+          console.error('Failed to store token in localStorage');
+          return { success: false, error: 'Failed to store authentication token' };
+        }
       } else {
-        set({ 
-          error: response.message || 'Invalid credentials', 
-          isLoading: false 
-        });
-        return { success: false, message: response.message };
+        console.error('Invalid signin response:', response);
+        return { success: false, error: response.error || 'Invalid response from server' };
       }
     } catch (error) {
       console.error('Signin error:', error);
-      set({ 
-        error: error.response?.data?.message || 'An error occurred during sign in', 
-        isLoading: false 
-      });
-      return { success: false, message: error.response?.data?.message };
+      set({ error: error.message });
+      return { success: false, error: error.message };
+    } finally {
+      set({ isLoading: false });
     }
   },
 
@@ -62,28 +76,16 @@ const useAuthStore = create((set) => ({
     set({ isLoading: true, error: null });
     try {
       const response = await authService.signup(userData);
-      if (response.success && response.token) {
-        localStorage.setItem('token', response.token);
-        set({ 
-          isAuthenticated: true, 
-          user: response.user,
-          isLoading: false 
-        });
+      if (response.success) {
+        set({ isAuthenticated: true, user: response.user });
         return { success: true };
-      } else {
-        set({ 
-          error: response.message || 'Registration failed', 
-          isLoading: false 
-        });
-        return { success: false, message: response.message };
       }
+      return { success: false, error: response.error };
     } catch (error) {
-      console.error('Signup error:', error);
-      set({ 
-        error: error.response?.data?.message || 'An error occurred during sign up', 
-        isLoading: false 
-      });
-      return { success: false, message: error.response?.data?.message };
+      set({ error: error.message });
+      return { success: false, error: error.message };
+    } finally {
+      set({ isLoading: false });
     }
   },
 
@@ -96,8 +98,13 @@ const useAuthStore = create((set) => ({
     set({ isLoading: true, error: null });
     try {
       const response = await authService.updateProfile(profileData);
+      console.log('Response from authService.updateProfile:', response);
       if (response.success) {
-        set({ user: response.data, isLoading: false });
+        set({ 
+          user: response.user,
+          isLoading: false,
+          error: null 
+        });
         return { success: true };
       } else {
         set({ 
@@ -108,11 +115,12 @@ const useAuthStore = create((set) => ({
       }
     } catch (error) {
       console.error('Profile update error:', error);
+      const errorMessage = error.response?.data?.message || 'An error occurred during profile update';
       set({ 
-        error: error.response?.data?.message || 'An error occurred during profile update', 
+        error: errorMessage,
         isLoading: false 
       });
-      return { success: false, message: error.response?.data?.message };
+      return { success: false, message: errorMessage };
     }
   },
 
@@ -121,7 +129,7 @@ const useAuthStore = create((set) => ({
     try {
       const response = await authService.updatePassword(passwordData);
       if (response.success) {
-        set({ isLoading: false });
+        set({ isLoading: false, error: null });
         return { success: true };
       } else {
         set({ 
@@ -132,11 +140,12 @@ const useAuthStore = create((set) => ({
       }
     } catch (error) {
       console.error('Password update error:', error);
+      const errorMessage = error.response?.data?.message || 'An error occurred during password update';
       set({ 
-        error: error.response?.data?.message || 'An error occurred during password update', 
+        error: errorMessage,
         isLoading: false 
       });
-      return { success: false, message: error.response?.data?.message };
+      return { success: false, message: errorMessage };
     }
   },
 
@@ -145,7 +154,7 @@ const useAuthStore = create((set) => ({
     try {
       const response = await authService.forgotPassword(email);
       if (response.success) {
-        set({ isLoading: false });
+        set({ isLoading: false, error: null });
         return { success: true };
       } else {
         set({ 
@@ -156,11 +165,12 @@ const useAuthStore = create((set) => ({
       }
     } catch (error) {
       console.error('Forgot password error:', error);
+      const errorMessage = error.response?.data?.message || 'An error occurred during password reset request';
       set({ 
-        error: error.response?.data?.message || 'An error occurred during password reset request', 
+        error: errorMessage,
         isLoading: false 
       });
-      return { success: false, message: error.response?.data?.message };
+      return { success: false, message: errorMessage };
     }
   }
 }));

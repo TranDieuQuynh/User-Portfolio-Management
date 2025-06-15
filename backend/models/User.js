@@ -7,9 +7,25 @@ const { sequelize } = require('../config/db');
 class User extends Model {
   // Generate JWT token
   getSignedJwtToken() {
-    return jwt.sign({ id: this.id }, process.env.JWT_SECRET, {
-      expiresIn: process.env.JWT_EXPIRE
-    });
+    return jwt.sign(
+      { 
+        id: this.id,
+        name: this.name,
+        email: this.email,
+        avatar: this.avatar,
+        title: this.title,
+        bio: this.bio,
+        location: this.location,
+        website: this.website,
+        github: this.github,
+        linkedin: this.linkedin,
+        twitter: this.twitter
+      }, 
+      process.env.JWT_SECRET, 
+      {
+        expiresIn: process.env.JWT_EXPIRE
+      }
+    );
   }
 
   // Match password
@@ -58,33 +74,61 @@ User.init(
       defaultValue: 'default.jpg'
     },
     bio: {
-      type: DataTypes.TEXT
+      type: DataTypes.TEXT,
+      allowNull: true
     },
     location: {
-      type: DataTypes.STRING
+      type: DataTypes.STRING,
+      allowNull: true
     },
     website: {
       type: DataTypes.STRING,
+      allowNull: true,
       validate: {
-        isUrl: true
+        isValidUrl(value) {
+          if (value && value !== '') {
+            const urlPattern = /^(https?:\/\/)?([\da-z.-]+)\.([a-z.]{2,6})([/\w .-]*)*\/?$/;
+            if (!urlPattern.test(value)) {
+              throw new Error('Website must be a valid URL');
+            }
+          }
+        }
       }
     },
     github: {
       type: DataTypes.STRING,
+      allowNull: true,
       validate: {
-        isUrl: true
+        isUrl: {
+          msg: 'GitHub URL must be valid',
+          args: {
+            allowNull: true
+          }
+        }
       }
     },
     linkedin: {
       type: DataTypes.STRING,
+      allowNull: true,
       validate: {
-        isUrl: true
+        isUrl: {
+          msg: 'LinkedIn URL must be valid',
+          args: {
+            allowNull: true
+          }
+        }
       }
     },
     twitter: {
       type: DataTypes.STRING,
+      allowNull: true,
       validate: {
-        isUrl: true
+        isUrl: {
+          msg: 'Twitter URL must be valid',
+          args: {
+            allowNull: true
+          }
+        }
       }
     },
     resetPasswordToken: {

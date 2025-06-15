@@ -1,15 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { projectsService } from '../services/api';
 import useAuthStore from '../stores/authStore';
 
 const ProjectSettings = () => {
   const navigate = useNavigate();
+  const { id } = useParams();
   const { isAuthenticated } = useAuthStore();
   const [projects, setProjects] = useState([]);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
+    title: '',
+    technologies: '',
     demoUrl: '',
     repositoryUrl: '',
     image: null
@@ -28,9 +31,33 @@ const ProjectSettings = () => {
         return;
       }
       await fetchProjects();
+      
+      // Nếu có ID trong URL, load project đó
+      if (id) {
+        try {
+          const response = await projectsService.getById(id);
+          if (response && response.data) {
+            const project = response.data;
+            setFormData({
+              name: project.name || '',
+              description: project.description || '',
+              title: project.title || '',
+              technologies: Array.isArray(project.technologies) ? project.technologies.join(', ') : '',
+              demoUrl: project.demoUrl || '',
+              repositoryUrl: project.repositoryUrl || '',
+              image: null
+            });
+            setImagePreview(project.image ? `${process.env.REACT_APP_API_URL}/uploads/${project.image}` : null);
+            setEditingId(id);
+          }
+        } catch (err) {
+          console.error('Error fetching project:', err);
+          setError('Failed to load project details');
+        }
+      }
     };
     checkAuthAndFetch();
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, navigate, id]);
 
   const fetchProjects = async () => {
     try {
@@ -105,6 +132,18 @@ const ProjectSettings = () => {
       // Thêm các trường dữ liệu vào FormData
       formDataToSend.append('name', formData.name);
       formDataToSend.append('description', formData.description);
+      formDataToSend.append('title', formData.title);
+
+      // Xử lý technologies: chuyển chuỗi thành mảng và append từng phần tử
+      const technologiesArray = formData.technologies
+        .split(',')
+        .map(tech => tech.trim())
+        .filter(tech => tech !== ''); // Lọc bỏ chuỗi rỗng
+
+      technologiesArray.forEach(tech => {
+        formDataToSend.append('technologies', tech);
+      });
+
       if (formData.demoUrl) {
         formDataToSend.append('demoUrl', formData.demoUrl);
       }
@@ -132,6 +171,8 @@ const ProjectSettings = () => {
       setFormData({
         name: '',
         description: '',
+        title: '',
+        technologies: '',
         demoUrl: '',
         repositoryUrl: '',
         image: null
@@ -159,6 +200,8 @@ const ProjectSettings = () => {
     setFormData({
       name: project.name,
       description: project.description,
+      title: project.title || '',
+      technologies: project.technologies || '',
       demoUrl: project.demoUrl || '',
       repositoryUrl: project.repositoryUrl || '',
       image: null
@@ -238,6 +281,35 @@ const ProjectSettings = () => {
                   value={formData.name}
                   onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-blue-50"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Project Title
+                </label>
+                <input
+                  type="text"
+                  name="title"
+                  value={formData.title}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-blue-50"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Technologies (comma-separated)
+                </label>
+                <input
+                  type="text"
+                  name="technologies"
+                  value={formData.technologies}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-blue-50"
+                  placeholder="e.g., React, Node.js, MongoDB"
                   required
                 />
               </div>
@@ -333,6 +405,8 @@ const ProjectSettings = () => {
                       setFormData({
                         name: '',
                         description: '',
+                        title: '',
+                        technologies: '',
                         demoUrl: '',
                         repositoryUrl: '',
                         image: null

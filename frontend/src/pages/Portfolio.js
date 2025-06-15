@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../stores/authStore';
-import { projectsService } from '../services/api';
+import { projectsService, API_URL } from '../services/api';
 
 // Default avatar image
 const DEFAULT_AVATAR = 'https://cdn-icons-png.flaticon.com/512/149/149071.png';
 const DEFAULT_COVER = 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2070&q=80';
+
+const BACKEND_BASE_URL = API_URL.replace('/api', '');
 
 function Portfolio() {
   const navigate = useNavigate();
@@ -14,7 +16,44 @@ function Portfolio() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
+  const handleDeleteProject = async (projectId) => {
+    try {
+      // Check if user is authenticated
+      if (!isAuthenticated) {
+        navigate('/signin');
+        return;
+      }
+
+      // Get token from localStorage
+      const token = localStorage.getItem('token');
+      if (!token) {
+        navigate('/signin');
+        return;
+      }
+
+      await projectsService.delete(projectId);
+      // Refresh projects list after deletion
+      const response = await projectsService.getAll();
+      if (response && Array.isArray(response.data)) {
+        const projectsWithAbsoluteUrls = response.data.map(project => ({
+          ...project,
+          imageUrl: project.image ? `${BACKEND_BASE_URL}/uploads/${project.image.replace(/^\/uploads\/+|\/+/g,'')}` : null
+        }));
+        setProjects(projectsWithAbsoluteUrls);
+      }
+    } catch (err) {
+      console.error('Error deleting project:', err);
+      if (err.response?.status === 401) {
+        // If unauthorized, redirect to signin
+        navigate('/signin');
+      } else {
+        setError('Failed to delete project');
+      }
+    }
+  };
+
   useEffect(() => {
+    console.log('Portfolio component mounted. User data:', user);
     const fetchProjects = async () => {
       if (!isAuthenticated) {
         navigate('/signin');
@@ -22,11 +61,26 @@ function Portfolio() {
       }
 
       try {
+        console.log('Fetching projects...');
         const response = await projectsService.getAll();
-        if (response && Array.isArray(response.projects)) {
-          setProjects(response.projects);
+        console.log('Projects fetched raw response:', response);
+        if (response && Array.isArray(response.data)) {
+          const projectsWithAbsoluteUrls = response.data.map(project => {
+            console.log('Portfolio: Raw project object from backend:', project);
+            console.log('Original project image:', project.image);
+            const imageUrl = project.image ? `${BACKEND_BASE_URL}/uploads/${project.image.replace(/^\/uploads\/+|\/+/g,'')}` : null;
+            const projectWithUrl = {
+              ...project,
+              imageUrl: imageUrl
+            };
+            console.log('Transformed imageUrl:', projectWithUrl.imageUrl);
+            return projectWithUrl;
+          });
+          setProjects(projectsWithAbsoluteUrls);
+          console.log('Projects state updated:', projectsWithAbsoluteUrls);
         } else {
           setProjects([]);
+          console.log('No projects found or unexpected response format.');
         }
       } catch (err) {
         console.error('Error fetching projects:', err);
@@ -41,7 +95,7 @@ function Portfolio() {
     };
 
     fetchProjects();
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, navigate, user]);
 
   if (isLoading) {
     return (
@@ -75,7 +129,7 @@ function Portfolio() {
       {/* Cover Image */}
       <div className="relative h-64 sm:h-80 md:h-96">
         <img
-          src={user?.coverImage || DEFAULT_COVER}
+          src={user?.coverImage ? `${BACKEND_BASE_URL}${user.coverImage}` : DEFAULT_COVER}
           alt="Cover"
           className="w-full h-full object-cover"
         />
@@ -91,7 +145,7 @@ function Portfolio() {
               <div className="relative">
                 <div className="h-32 w-32 rounded-full overflow-hidden border-4 border-white shadow-lg">
                   <img
-                    src={user?.avatar || DEFAULT_AVATAR}
+                    src={user?.avatar ? `${BACKEND_BASE_URL}${user.avatar}` : DEFAULT_AVATAR}
                     alt={user?.name || 'User'}
                     className="h-full w-full object-cover"
                     onError={(e) => {
@@ -186,37 +240,54 @@ function Portfolio() {
         {/* Projects Section */}
         <div className="mt-12">
           <h2 className="text-3xl font-bold text-gray-900 mb-8">My Projects</h2>
+          <div className="text-center mb-8">
+            <button
+              onClick={() => navigate('/projects')}
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+            >
+              Add Projects
+            </button>
+          </div>
           
           {projects.length === 0 ? (
             <div className="text-center">
               <p className="text-gray-500">No projects found. Start by adding some projects!</p>
-              <button
-                onClick={() => navigate('/projects')}
-                className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-              >
-                Add Projects
-              </button>
             </div>
           ) : (
             <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
               {projects.map((project) => (
                 <div
-                  key={project._id}
-                  className="bg-white overflow-hidden shadow rounded-lg"
+                  key={project.id}
+                  className="bg-white overflow-hidden shadow rounded-lg cursor-pointer transform transition duration-300 hover:scale-105"
+                  onClick={() => {
+                    console.log('Portfolio: Navigating to project with ID:', project.id);
+                    navigate(`/projects/view/${project.id}`);
+                  }}
                 >
+                  {console.log('Rendering project image:', project.imageUrl)}
                   {project.imageUrl && (
                     <div className="relative pb-48">
                       <img
                         className="absolute h-full w-full object-cover"
                         src={project.imageUrl}
                         alt={project.name}
+                        onError={(e) => {
+                          console.error('Image failed to load:', project.imageUrl);
+                          e.target.onerror = null;
+                          e.target.src = 'https://via.placeholder.com/400x300?text=No+Image';
+                        }}
                       />
                     </div>
                   )}
-                  <div className="p-6">
-                    <h3 className="text-lg font-medium text-gray-900">
-                      {project.name}
-                    </h3>
+                  <div className="p-4">
+                    <div className="flex justify-between items-start mb-2">
+                      <h3 className="text-lg font-medium text-gray-900">
+                        {project.name}
+                      </h3>
+                      <span className="text-sm text-gray-500">
+                        By {project.User?.name || 'Unknown'}
+                      </span>
+                    </div>
                     <p className="mt-2 text-sm text-gray-500">
                       {project.description}
                     </p>
@@ -241,6 +312,17 @@ function Portfolio() {
                           Repository
                         </a>
                       )}
+                    </div>
+                    <div className="mt-4 flex justify-end space-x-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/projects/edit/${project.id}`);
+                        }}
+                        className="px-3 py-1 text-sm font-medium text-blue-600 hover:text-blue-800"
+                      >
+                        Edit
+                      </button>
                     </div>
                   </div>
                 </div>

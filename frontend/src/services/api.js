@@ -1,12 +1,9 @@
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+export const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
 const api = axios.create({
   baseURL: API_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
   withCredentials: true,
   timeout: 10000,
 });
@@ -15,8 +12,19 @@ const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
+    console.log('Request interceptor - Token:', token ? 'Token exists' : 'No token');
     if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+      config.headers['Authorization'] = `Bearer ${token}`;
+      console.log('Request headers:', {
+        Authorization: 'Bearer ' + token.substring(0, 10) + '...',
+        'Content-Type': config.headers['Content-Type']
+      });
+    }
+    // Preserve Content-Type if it's set
+    if (config.headers['Content-Type']) {
+      config.headers['Content-Type'] = config.headers['Content-Type'];
+    } else {
+      config.headers['Content-Type'] = 'application/json';
     }
     return config;
   },
@@ -25,16 +33,78 @@ api.interceptors.request.use(
   }
 );
 
+// Hàm kiểm tra JWT token
+export const checkJWTValidity = () => {
+  console.log('Checking JWT validity...');
+  const token = localStorage.getItem('token');
+  console.log('Token from localStorage:', token ? 'exists' : 'not found');
+  
+  if (!token) {
+    console.log('No token found');
+    return false;
+  }
+
+  try {
+    const tokenData = JSON.parse(atob(token.split('.')[1]));
+    const currentTime = Math.floor(Date.now() / 1000);
+    
+    console.log('JWT Status:', {
+      isValid: tokenData.exp > currentTime,
+      expiresAt: new Date(tokenData.exp * 1000).toLocaleString(),
+      currentTime: new Date(currentTime * 1000).toLocaleString(),
+      duration: Math.floor((tokenData.exp - currentTime) / 60) + ' minutes remaining',
+      tokenData: tokenData
+    });
+
+    const isValid = tokenData.exp > currentTime;
+    if (!isValid) {
+      console.log('Token is expired');
+    }
+    return isValid;
+  } catch (err) {
+    console.error('Invalid JWT format:', err);
+    return false;
+  }
+};
+
 // Response interceptor
 api.interceptors.response.use(
   (response) => {
     return response.data;
   },
   (error) => {
-    if (error.response?.status === 401 && !error.config.url.includes('/auth/signin')) {
-      localStorage.removeItem('token');
-      window.location.href = '/signin';
+    console.log('API Error:', {
+      status: error.response?.status,
+      message: error.message,
+      url: error.config?.url,
+      data: error.response?.data,
+      headers: error.config?.headers
+    });
+
+    if (error.response?.status === 401) {
+      console.log('Received 401 error for URL:', error.config.url);
+      const isAuthRoute = error.config.url.includes('/auth/signin') || 
+                         error.config.url.includes('/auth/signup') ||
+                         error.config.url.includes('/auth/forgot-password');
+      
+      console.log('Is auth route:', isAuthRoute);
+      
+      if (!isAuthRoute) {
+        const isTokenValid = checkJWTValidity();
+        console.log('Token validation result:', isTokenValid);
+        if (!isTokenValid) {
+          console.log('Token is invalid or expired');
+          localStorage.removeItem('token');
+        }
+      }
+    } else if (error.response?.status === 404) {
+      console.error('Resource not found:', error.config.url);
+    } else if (error.response?.status === 500) {
+      console.error('Server error:', error.response.data);
+    } else if (!error.response) {
+      console.error('Network error or request cancelled:', error.message);
     }
+
     return Promise.reject(error);
   }
 );
@@ -73,9 +143,16 @@ const authService = {
 
   updateProfile: async (profileData) => {
     try {
-      const response = await api.put('/auth/profile', profileData);
+      console.log('Sending profile update request with data:', profileData);
+      const response = await api.put('/auth/profile', profileData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      console.log('Profile update response:', response);
       return response;
     } catch (error) {
+      console.error('Profile update API error:', error.response?.data || error.message);
       throw error;
     }
   },
@@ -96,7 +173,16 @@ const authService = {
     } catch (error) {
       throw error;
     }
-  }
+  },
+
+  resetPassword: async (token, password) => {
+    try {
+      const response = await api.post(`/auth/reset-password/${token}`, { password });
+      return response;
+    } catch (error) {
+      throw error;
+    }
+  },
 };
 
 // Portfolio service
@@ -156,16 +242,7 @@ export const projectsService = {
     } catch (error) {
       throw error;
     }
-  },
-
-  delete: async (id) => {
-    try {
-      const response = await api.delete(`/projects/${id}`);
-      return response;
-    } catch (error) {
-      throw error;
-    }
-  },
+  }
 };
 
 export { authService };

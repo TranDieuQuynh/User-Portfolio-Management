@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import useAuthStore from '../stores/authStore';
+import { API_URL } from '../services/api';
 
 const DEFAULT_AVATAR = 'https://cdn-icons-png.flaticon.com/512/149/149071.png';
 const DEFAULT_COVER = 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2070&q=80';
+
+const BACKEND_BASE_URL = API_URL.replace('/api', '');
 
 const Profile = () => {
   const { user, updateProfile } = useAuthStore();
@@ -40,8 +43,26 @@ const Profile = () => {
         avatar: user.avatar || null,
         coverImage: user.coverImage || null
       });
-      setAvatarPreview(user.avatar || DEFAULT_AVATAR);
-      setCoverPreview(user.coverImage || DEFAULT_COVER);
+
+      let finalAvatarPreview = DEFAULT_AVATAR;
+      if (user.avatar) {
+        if (user.avatar.startsWith('/')) {
+          finalAvatarPreview = `${BACKEND_BASE_URL}${user.avatar}`;
+        } else {
+          finalAvatarPreview = user.avatar;
+        }
+      }
+      setAvatarPreview(finalAvatarPreview);
+
+      let finalCoverPreview = DEFAULT_COVER;
+      if (user.coverImage) {
+        if (user.coverImage.startsWith('/')) {
+          finalCoverPreview = `${BACKEND_BASE_URL}${user.coverImage}`;
+        } else {
+          finalCoverPreview = user.coverImage;
+        }
+      }
+      setCoverPreview(finalCoverPreview);
     }
   }, [user]);
 
@@ -56,18 +77,6 @@ const Profile = () => {
   const handleImageChange = (e, type) => {
     const file = e.target.files[0];
     if (file) {
-      // Kiểm tra kích thước file (giới hạn 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        setError('Kích thước ảnh phải nhỏ hơn 5MB');
-        return;
-      }
-
-      // Kiểm tra loại file
-      if (!file.type.startsWith('image/')) {
-        setError('Vui lòng chọn file ảnh');
-        return;
-      }
-
       const reader = new FileReader();
       reader.onloadend = () => {
         if (type === 'avatar') {
@@ -94,6 +103,7 @@ const Profile = () => {
       // Thêm các trường text
       Object.entries(formData).forEach(([key, value]) => {
         if (value !== null && value !== undefined && key !== 'avatar' && key !== 'coverImage') {
+          // Đảm bảo giá trị là string
           formDataToSend.append(key, String(value));
         }
       });
@@ -114,10 +124,10 @@ const Profile = () => {
 
       const response = await updateProfile(formDataToSend);
       console.log('Update profile response:', response);
-      setSuccess('Cập nhật profile thành công');
+      setSuccess('Profile updated successfully');
     } catch (err) {
       console.error('Update profile error:', err);
-      setError(err.message || 'Không thể cập nhật profile');
+      setError(err.message || 'Failed to update profile');
     } finally {
       setIsLoading(false);
     }

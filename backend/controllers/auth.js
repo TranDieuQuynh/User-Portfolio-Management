@@ -178,15 +178,8 @@ exports.forgotPassword = async (req, res) => {
       });
     }
 
-    // Generate reset token
-    const resetToken = jwt.sign(
-      { id: user.id },
-      process.env.JWT_SECRET,
-      { expiresIn: '1h' }
-    );
-
-    // Save reset token to user
-    user.resetToken = resetToken;
+    // Generate and hash reset token, also sets resetPasswordExpire
+    const resetToken = user.getResetPasswordToken();
     await user.save();
 
     // Send reset email
@@ -213,11 +206,12 @@ exports.forgotPassword = async (req, res) => {
 };
 
 // @desc    Reset password
-// @route   POST /api/auth/reset-password
+// @route   POST /api/auth/reset-password/:token
 // @access  Public
 exports.resetPassword = async (req, res) => {
   try {
-    const { token, password } = req.body;
+    const { token } = req.params; // Get token from URL parameters
+    const { password } = req.body; // Get password from request body
 
     if (!token || !password) {
       return res.status(400).json({
@@ -226,9 +220,18 @@ exports.resetPassword = async (req, res) => {
       });
     }
 
-    // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findByPk(decoded.id);
+    // Verify token by hashing the incoming token and comparing it with the hashed token in the database
+    const hashedToken = crypto
+      .createHash('sha256')
+      .update(token)
+      .digest('hex');
+
+    const user = await User.findOne({
+      where: {
+        resetPasswordToken: hashedToken,
+        resetPasswordExpire: { [Op.gt]: Date.now() } // Check if token is still valid
+      }
+    });
 
     if (!user) {
       return res.status(400).json({
@@ -239,6 +242,8 @@ exports.resetPassword = async (req, res) => {
 
     // Set new password
     user.password = password;
+    user.resetPasswordToken = null;
+    user.resetPasswordExpire = null;
     await user.save();
 
     res.status(200).json({
@@ -302,7 +307,22 @@ exports.updateProfile = async (req, res) => {
     res.status(200).json({
       success: true,
       message: 'Profile updated successfully',
-      user: userResponse
+      // user: userResponse
+
+      user: {
+        id: user._id, // Hoặc user.id tùy vào cách bạn định nghĩa ID
+        name: user.name,
+        email: user.email,
+        title: user.title,       // <--- Đảm bảo trường này được bao gồm
+        bio: user.bio,
+        location: user.location, // <--- Đảm bảo trường này được bao gồm
+        avatar: user.avatar,     // <--- Đảm bảo đường dẫn avatar được bao gồm
+        website: user.website,
+        github: user.github,
+        linkedin: user.linkedin,
+        twitter: user.twitter,
+        // ... thêm bất kỳ trường nào khác cần thiết
+      }
     });
   } catch (error) {
     console.error('Update profile error:', error);

@@ -25,8 +25,16 @@ const SignIn = () => {
         email: formData.email,
         password: formData.password
       });
+      
       if (response.success) {
-        navigate('/portfolio');
+        // Check if token exists in localStorage
+        const token = localStorage.getItem('token');
+        if (token) {
+          console.log('Token stored successfully');
+          navigate('/portfolio');
+        } else {
+          console.error('Token not found in localStorage after signin');
+        }
       }
     } catch (error) {
       console.error('Signin error:', error);
