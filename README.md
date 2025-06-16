@@ -47,18 +47,4 @@
 
 ---
 
-## 🌐 Giao diện minh họa
-
-### Trang đăng nhập
-![Đăng nhập](https://user-images.githubusercontent.com/signin-page.png)
-
-### Quên mật khẩu
-![Quên mật khẩu](https://user-images.githubusercontent.com/forgot-password.png)
-
-### Portfolio công khai
-![Portfolio](https://user-images.githubusercontent.com/public-portfolio.png)
-
----
-
-
 
